@@ -1,19 +1,19 @@
-import {redirect} from '@shopify/remix-oxygen';
-import {useLoaderData, Link} from '@remix-run/react';
+import { redirect } from '@shopify/remix-oxygen';
+import { useLoaderData, Link } from '@remix-run/react';
 import {
   getPaginationVariables,
   Image,
   Money,
   Analytics,
 } from '@shopify/hydrogen';
-import {useVariantUrl} from '~/lib/variants';
-import {PaginatedResourceSection} from '~/components/PaginatedResourceSection';
+import { useVariantUrl } from '~/lib/variants';
+import { PaginatedResourceSection } from '~/components/PaginatedResourceSection';
 
 /**
  * @type {MetaFunction<typeof loader>}
  */
-export const meta = ({data}) => {
-  return [{title: `Hydrogen | ${data?.collection.title ?? ''} Collection`}];
+export const meta = ({ data }) => {
+  return [{ title: `Hydrogen | ${data?.collection.title ?? ''} Collection` }];
 };
 
 /**
@@ -26,7 +26,7 @@ export async function loader(args) {
   // Await the critical data required to render initial state of the page
   const criticalData = await loadCriticalData(args);
 
-  return {...deferredData, ...criticalData};
+  return { ...deferredData, ...criticalData };
 }
 
 /**
@@ -34,9 +34,9 @@ export async function loader(args) {
  * needed to render the page. If it's unavailable, the whole page should 400 or 500 error.
  * @param {LoaderFunctionArgs}
  */
-async function loadCriticalData({context, params, request}) {
-  const {handle} = params;
-  const {storefront} = context;
+async function loadCriticalData({ context, params, request }) {
+  const { handle } = params;
+  const { storefront } = context;
   const paginationVariables = getPaginationVariables(request, {
     pageBy: 8,
   });
@@ -45,9 +45,9 @@ async function loadCriticalData({context, params, request}) {
     throw redirect('/collections');
   }
 
-  const [{collection}] = await Promise.all([
+  const [{ collection }] = await Promise.all([
     storefront.query(COLLECTION_QUERY, {
-      variables: {handle, ...paginationVariables},
+      variables: { handle, ...paginationVariables },
       // Add other queries here, so that they are loaded in parallel
     }),
   ]);
@@ -69,13 +69,13 @@ async function loadCriticalData({context, params, request}) {
  * Make sure to not throw any errors here, as it will cause the page to 500.
  * @param {LoaderFunctionArgs}
  */
-function loadDeferredData({context}) {
+function loadDeferredData({ context }) {
   return {};
 }
 
 export default function Collection() {
   /** @type {LoaderReturnData} */
-  const {collection} = useLoaderData();
+  const { collection } = useLoaderData();
 
   return (
     <div className="collection">
@@ -85,7 +85,7 @@ export default function Collection() {
         connection={collection.products}
         resourcesClassName="products-grid"
       >
-        {({node: product, index}) => (
+        {({ node: product, index }) => (
           <ProductItem
             key={product.id}
             product={product}
@@ -111,7 +111,7 @@ export default function Collection() {
  *   loading?: 'eager' | 'lazy';
  * }}
  */
-function ProductItem({product, loading}) {
+function ProductItem({ product, loading }) {
   const variantUrl = useVariantUrl(product.handle);
   return (
     <Link
@@ -123,16 +123,23 @@ function ProductItem({product, loading}) {
       {product.featuredImage && (
         <Image
           alt={product.featuredImage.altText || product.title}
-          aspectRatio="1/1"
           data={product.featuredImage}
           loading={loading}
           sizes="(min-width: 45em) 400px, 100vw"
+          crop=''
+          width={1000}
+          className='w-full h-[500px] object-cover'
         />
       )}
       <h4>{product.title}</h4>
-      <small>
+      <span className='text-red-900 font-bold'>
         <Money data={product.priceRange.minVariantPrice} />
-      </small>
+      </span>
+      {product.variants.nodes[0]?.compareAtPriceV2 && (
+        <span className="text-sm text-gray-400 line-through">
+          <Money data={product.variants.nodes[0].compareAtPriceV2} />
+        </span>
+      )}
     </Link>
   );
 }
@@ -161,6 +168,19 @@ const PRODUCT_ITEM_FRAGMENT = `#graphql
         ...MoneyProductItem
       }
     }
+      variants(first: 1) {
+          nodes {
+            id
+            priceV2 {
+              amount
+              currencyCode
+            }
+            compareAtPriceV2 {
+              amount
+              currencyCode
+            }
+          }
+        }
   }
 `;
 

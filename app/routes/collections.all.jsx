@@ -1,13 +1,13 @@
-import {useLoaderData, Link} from '@remix-run/react';
-import {getPaginationVariables, Image, Money} from '@shopify/hydrogen';
-import {useVariantUrl} from '~/lib/variants';
-import {PaginatedResourceSection} from '~/components/PaginatedResourceSection';
+import { useLoaderData, Link } from '@remix-run/react';
+import { getPaginationVariables, Image, Money } from '@shopify/hydrogen';
+import { useVariantUrl } from '~/lib/variants';
+import { PaginatedResourceSection } from '~/components/PaginatedResourceSection';
 
 /**
  * @type {MetaFunction<typeof loader>}
  */
 export const meta = () => {
-  return [{title: `Hydrogen | Products`}];
+  return [{ title: `Hydrogen | Products` }];
 };
 
 /**
@@ -20,7 +20,7 @@ export async function loader(args) {
   // Await the critical data required to render initial state of the page
   const criticalData = await loadCriticalData(args);
 
-  return {...deferredData, ...criticalData};
+  return { ...deferredData, ...criticalData };
 }
 
 /**
@@ -28,19 +28,19 @@ export async function loader(args) {
  * needed to render the page. If it's unavailable, the whole page should 400 or 500 error.
  * @param {LoaderFunctionArgs}
  */
-async function loadCriticalData({context, request}) {
-  const {storefront} = context;
+async function loadCriticalData({ context, request }) {
+  const { storefront } = context;
   const paginationVariables = getPaginationVariables(request, {
     pageBy: 8,
   });
 
-  const [{products}] = await Promise.all([
+  const [{ products }] = await Promise.all([
     storefront.query(CATALOG_QUERY, {
-      variables: {...paginationVariables},
+      variables: { ...paginationVariables },
     }),
     // Add other queries here, so that they are loaded in parallel
   ]);
-  return {products};
+  return { products };
 }
 
 /**
@@ -49,14 +49,13 @@ async function loadCriticalData({context, request}) {
  * Make sure to not throw any errors here, as it will cause the page to 500.
  * @param {LoaderFunctionArgs}
  */
-function loadDeferredData({context}) {
+function loadDeferredData({ context }) {
   return {};
 }
 
 export default function Collection() {
   /** @type {LoaderReturnData} */
-  const {products} = useLoaderData();
-
+  const { products } = useLoaderData();
   return (
     <div className="collection">
       <h1>Products</h1>
@@ -64,7 +63,7 @@ export default function Collection() {
         connection={products}
         resourcesClassName="products-grid"
       >
-        {({node: product, index}) => (
+        {({ node: product, index }) => (
           <ProductItem
             key={product.id}
             product={product}
@@ -82,8 +81,9 @@ export default function Collection() {
  *   loading?: 'eager' | 'lazy';
  * }}
  */
-function ProductItem({product, loading}) {
+function ProductItem({ product, loading }) {
   const variantUrl = useVariantUrl(product.handle);
+  // console.log('products', product);
   return (
     <Link
       className="product-item"
@@ -94,16 +94,23 @@ function ProductItem({product, loading}) {
       {product.featuredImage && (
         <Image
           alt={product.featuredImage.altText || product.title}
-          aspectRatio="1/1"
           data={product.featuredImage}
           loading={loading}
           sizes="(min-width: 45em) 400px, 100vw"
+          crop=''
+          width={1000}
+          className='w-full h-[500px] object-cover'
         />
       )}
       <h4>{product.title}</h4>
-      <small>
+      <span className='text-red-900 font-bold'>
         <Money data={product.priceRange.minVariantPrice} />
-      </small>
+      </span>
+      {product.variants.nodes[0]?.compareAtPriceV2 && (
+        <span className="text-sm text-gray-400 line-through">
+          <Money data={product.variants.nodes[0].compareAtPriceV2} />
+        </span>
+      )}
     </Link>
   );
 }
@@ -131,6 +138,19 @@ const PRODUCT_ITEM_FRAGMENT = `#graphql
       maxVariantPrice {
         ...MoneyProductItem
       }
+    }
+    variants(first: 1) {
+        nodes {
+          id
+          priceV2 {
+            amount
+            currencyCode
+          }
+          compareAtPriceV2 {
+            amount
+            currencyCode
+          }
+        }
     }
   }
 `;
