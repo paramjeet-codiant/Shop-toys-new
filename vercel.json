@@ -1,0 +1,11 @@
+{
+  "env": {
+    "SESSION_SECRET": "foobar",
+    "PUBLIC_STORE_DOMAIN": "shop-and-toys.myshopify.com",
+    "PUBLIC_STOREFRONT_API_TOKEN": "5a8eda8d8e9b6d63bee2a39f7f809a04",
+    "PRIVATE_STOREFRONT_API_TOKEN": "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",
+    "PUBLIC_CUSTOMER_ACCOUNT_API_CLIENT_ID": "shp_1fbe99a0-fd59-4d51-ba77-7e5427dfdcd1",
+    "PUBLIC_CUSTOMER_ACCOUNT_API_URL": "https://shopify.com/93516759343",
+    "PUBLIC_STOREFRONT_ID": "54583"
+  }
+}
