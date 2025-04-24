@@ -3,7 +3,6 @@
   "private": true,
   "sideEffects": false,
   "version": "2025.1.5",
-  "type": "module",
   "scripts": {
     "build": "shopify hydrogen build --codegen",
     "dev": "shopify hydrogen dev --codegen",
