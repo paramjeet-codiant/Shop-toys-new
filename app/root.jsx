@@ -1,39 +1,50 @@
-import { getShopAnalytics } from '@shopify/hydrogen';
-import { Outlet, useRouteError, isRouteErrorResponse } from '@remix-run/react';
-import favicon from '~/assets/favicon.png';
+import { useNonce, getShopAnalytics, Analytics } from '@shopify/hydrogen';
+import { defer } from '@shopify/remix-oxygen';
+import {
+  Links,
+  Meta,
+  Outlet,
+  Scripts,
+  useRouteError,
+  useRouteLoaderData,
+  ScrollRestoration,
+  isRouteErrorResponse,
+} from '@remix-run/react';
+import favicon from '~/assets/favicon.svg';
+import resetStyles from '~/styles/reset.css?url';
+import appStyles from '~/styles/app.css?url';
+import swiperStyles from 'swiper/css';
+import bootstrapStyles from 'bootstrap/dist/css/bootstrap.min.css?url';
+import tailwindStyles from '~/styles/tailwind.css?url';
+import { PageLayout } from '~/components/PageLayout';
 import { FOOTER_QUERY, HEADER_QUERY } from '~/lib/fragments';
 
 /**
  * This is important to avoid re-fetching root queries on sub-navigations
  * @type {ShouldRevalidateFunction}
  */
-export const shouldRevalidate = ({ formMethod, currentUrl, nextUrl }) => {
+export const shouldRevalidate = ({
+  formMethod,
+  currentUrl,
+  nextUrl,
+  defaultShouldRevalidate,
+}) => {
   // revalidate when a mutation is performed e.g add to cart, login...
   if (formMethod && formMethod !== 'GET') return true;
 
   // revalidate when manually revalidating via useRevalidator
   if (currentUrl.toString() === nextUrl.toString()) return true;
 
-  // Defaulting to no revalidation for root loader data to improve performance.
-  // When using this feature, you risk your UI getting out of sync with your server.
-  // Use with caution. If you are uncomfortable with this optimization, update the
-  // line below to `return defaultShouldRevalidate` instead.
-  // For more details see: https://remix.run/docs/en/main/route/should-revalidate
-  return false;
+  return defaultShouldRevalidate;
 };
 
-/**
- * The main and reset stylesheets are added in the Layout component
- * to prevent a bug in development HMR updates.
- *
- * This avoids the "failed to execute 'insertBefore' on 'Node'" error
- * that occurs after editing and navigating to another page.
- *
- * It's a temporary fix until the issue is resolved.
- * https://github.com/remix-run/remix/issues/9242
- */
 export function links() {
   return [
+    { rel: 'stylesheet', href: resetStyles },
+    { rel: 'stylesheet', href: appStyles },
+    { rel: 'stylesheet', href: swiperStyles },
+    { rel: 'stylesheet', href: tailwindStyles },
+    { rel: 'stylesheet', href: bootstrapStyles },
     {
       rel: 'preconnect',
       href: 'https://cdn.shopify.com',
@@ -58,7 +69,7 @@ export async function loader(args) {
 
   const { storefront, env } = args.context;
 
-  return {
+  return defer({
     ...deferredData,
     ...criticalData,
     publicStoreDomain: env.PUBLIC_STORE_DOMAIN,
@@ -69,12 +80,8 @@ export async function loader(args) {
     consent: {
       checkoutDomain: env.PUBLIC_CHECKOUT_DOMAIN,
       storefrontAccessToken: env.PUBLIC_STOREFRONT_API_TOKEN,
-      withPrivacyBanner: false,
-      // localize the privacy banner
-      country: args.context.storefront.i18n.country,
-      language: args.context.storefront.i18n.language,
     },
-  };
+  });
 }
 
 /**
@@ -95,7 +102,9 @@ async function loadCriticalData({ context }) {
     // Add other queries here, so that they are loaded in parallel
   ]);
 
-  return { header };
+  return {
+    header,
+  };
 }
 
 /**
@@ -127,6 +136,41 @@ function loadDeferredData({ context }) {
   };
 }
 
+/**
+ * @param {{children?: React.ReactNode}}
+ */
+export function Layout({ children }) {
+  const nonce = useNonce();
+  /** @type {RootLoader} */
+  const data = useRouteLoaderData('root');
+
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <Meta />
+        <Links />
+      </head>
+      <body>
+        {data ? (
+          <Analytics.Provider
+            cart={data.cart}
+            shop={data.shop}
+            consent={data.consent}
+          >
+            <PageLayout {...data}>{children}</PageLayout>
+          </Analytics.Provider>
+        ) : (
+          children
+        )}
+        <ScrollRestoration nonce={nonce} />
+        <Scripts nonce={nonce} />
+      </body>
+    </html>
+  );
+}
+
 export default function App() {
   return <Outlet />;
 }
@@ -156,7 +200,7 @@ export function ErrorBoundary() {
   );
 }
 
-/** @typedef {Class<loader>} RootLoader */
+/** @typedef {LoaderReturnData} RootLoader */
 
 /** @typedef {import('@shopify/remix-oxygen').LoaderFunctionArgs} LoaderFunctionArgs */
 /** @typedef {import('@remix-run/react').ShouldRevalidateFunction} ShouldRevalidateFunction */
