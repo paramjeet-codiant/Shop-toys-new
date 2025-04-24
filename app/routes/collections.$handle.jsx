@@ -1,5 +1,5 @@
 import { redirect } from '@shopify/remix-oxygen';
-import { useLoaderData, Link } from '@remix-run/react';
+import { useLoaderData, Link, useSearchParams } from '@remix-run/react';
 import {
   getPaginationVariables,
   Image,
@@ -8,6 +8,8 @@ import {
 } from '@shopify/hydrogen';
 import { useVariantUrl } from '~/lib/variants';
 import { PaginatedResourceSection } from '~/components/PaginatedResourceSection';
+import { useState } from 'react';
+import { ProductFilter } from '~/components/ProductFilter.jsx';
 
 /**
  * @type {MetaFunction<typeof loader>}
@@ -37,20 +39,30 @@ export async function loader(args) {
 async function loadCriticalData({ context, params, request }) {
   const { handle } = params;
   const { storefront } = context;
-  const paginationVariables = getPaginationVariables(request, {
-    pageBy: 8,
-  });
 
   if (!handle) {
     throw redirect('/collections');
   }
+  const paginationVariables = getPaginationVariables(request, {
+    pageBy: 12,
+  });
+  const url = new URL(request.url);
+  const filters = parseFiltersFromSearchParams(url.searchParams);
+  const sortKey = url.searchParams.get('sortKey') || 'RELEVANCE';
+  const reverse = url.searchParams.get('reverse') === 'true';
+  const variables = {
+    handle,
+    ...paginationVariables,
+    ...(filters.length > 0 && { filters }),
+    sortKey,
+    reverse,
+  };
 
-  const [{ collection }] = await Promise.all([
-    storefront.query(COLLECTION_QUERY, {
-      variables: { handle, ...paginationVariables },
-      // Add other queries here, so that they are loaded in parallel
-    }),
-  ]);
+  console.log('FILTERS:', filters);
+
+  const { collection } = await storefront.query(COLLECTION_QUERY, {
+    variables,
+  });
 
   if (!collection) {
     throw new Response(`Collection ${handle} not found`, {
@@ -72,35 +84,152 @@ async function loadCriticalData({ context, params, request }) {
 function loadDeferredData({ context }) {
   return {};
 }
+function parseFiltersFromSearchParams(searchParams) {
+  const filters = [];
 
+  for (const [key, value] of searchParams.entries()) {
+    if (!value) continue;
+
+    if (key.startsWith('filter.v.option.')) {
+      const optionName = key.replace('filter.v.option.', '');
+      filters.push({
+        variantOption: {
+          name: optionName,
+          value,
+        },
+      });
+    }
+
+    if (key === 'filter.v.price.gte') {
+      filters.push({ price: { min: parseFloat(value) } });
+    }
+
+    if (key === 'filter.v.price.lte') {
+      filters.push({ price: { max: parseFloat(value) } });
+    }
+
+    // ✅ Metafield filters (parse filter.p.m.namespace.key=value)
+    if (key.startsWith('filter.p.m.')) {
+      const match = key.match(/^filter\.p\.m\.([^.]+)\.([^.]+)$/);
+      if (match) {
+        const [, namespace, metafieldKey] = match;
+        filters.push({
+          productMetafield: {
+            namespace,
+            key: metafieldKey,
+            value,
+          },
+        });
+      }
+    }
+  }
+
+  return filters;
+}
+const sortOptions = [
+  { label: 'Featured', sortKey: 'MANUAL', reverse: false },
+  { label: 'Price: Low to High', sortKey: 'PRICE', reverse: false },
+  { label: 'Price: High to Low', sortKey: 'PRICE', reverse: true },
+  { label: 'Newest to Oldest', sortKey: 'CREATED', reverse: true },
+  { label: 'Oldest to Newest', sortKey: 'CREATED', reverse: false },
+  { label: 'Alphabetical A–Z', sortKey: 'TITLE', reverse: false },
+  { label: 'Alphabetical Z–A', sortKey: 'TITLE', reverse: true },
+];
 export default function Collection() {
   /** @type {LoaderReturnData} */
-  const { collection } = useLoaderData();
+  const { collection, sortKey, reverse } = useLoaderData();
+  const [searchParams] = useSearchParams();
+  const [selectedSort, setSelectedSort] = useState(() => {
+    const sortKeyParam = searchParams.get('sortKey') || 'CREATED';
+    const reverseParam = searchParams.get('reverse') || 'true';
+
+    const match = sortOptions.find(
+      (opt) =>
+        opt.sortKey === sortKeyParam &&
+        String(opt.reverse) === String(reverseParam)
+    );
+
+    return match || sortOptions[0]; // default fallback
+  });
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const currentSort = sortOptions.find(
+    (opt) => opt.sortKey === sortKey && opt.reverse === reverse
+  ) || sortOptions[0];
+
+  const buildSortUrl = (option) => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set('sortKey', option.sortKey);
+    newParams.set('reverse', option.reverse);
+    return `?${newParams.toString()}`;
+  };
 
   return (
     <div className="collection">
       <h1>{collection.title}</h1>
-      <p className="collection-description">{collection.description}</p>
-      <PaginatedResourceSection
-        connection={collection.products}
-        resourcesClassName="products-grid"
-      >
-        {({ node: product, index }) => (
-          <ProductItem
-            key={product.id}
-            product={product}
-            loading={index < 8 ? 'eager' : undefined}
+      <div className='sort-options'>
+        <select
+          value={`${selectedSort.sortKey}|${selectedSort.reverse}`}
+          onChange={(e) => {
+            const [sortKey, reverse] = e.target.value.split('|');
+            const newParams = new URLSearchParams(searchParams);
+            newParams.set('sortKey', sortKey);
+            newParams.set('reverse', reverse);
+
+            // Update selected sort before navigating
+            const match = sortOptions.find(
+              (opt) =>
+                opt.sortKey === sortKey && String(opt.reverse) === reverse
+            );
+            if (match) {
+              setSelectedSort(match);
+            }
+
+            // Navigate to new URL (can use window.location.href or better: use navigate())
+            window.location.href = `?${newParams.toString()}`;
+          }}
+          className="border px-2 py-1 rounded mb-4"
+        >
+          {sortOptions.map((opt) => (
+            <option key={`${opt.sortKey}|${opt.reverse}`} value={`${opt.sortKey}|${opt.reverse}`}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="products-grid-wrapper flex">
+        <div className="products-grid-filter w-1/5">
+          <ProductFilter filters={collection.products.filters} />
+        </div>
+        <div className="products-grid w-full">
+          {collection.products.nodes.length > 0 ? (
+            <div className={`products-grid-items products-grid grid gap-4`}>
+              {collection.products.nodes.map((product, index) => (
+                <ProductItem
+                  key={product.id}
+                  product={product}
+                  loading={index < 8 ? 'eager' : undefined}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="no-products">
+              <p>No matching products found.</p>
+              <Link to="?"><button>Clear Filters</button></Link>
+            </div>
+          )}
+          <Analytics.CollectionView
+            data={{
+              collection: {
+                id: collection.id,
+                handle: collection.handle,
+              },
+            }}
           />
-        )}
-      </PaginatedResourceSection>
-      <Analytics.CollectionView
-        data={{
-          collection: {
-            id: collection.id,
-            handle: collection.handle,
-          },
-        }}
-      />
+        </div>
+      </div>
     </div>
   );
 }
@@ -168,33 +297,53 @@ const PRODUCT_ITEM_FRAGMENT = `#graphql
         ...MoneyProductItem
       }
     }
-      variants(first: 1) {
-          nodes {
-            id
-            priceV2 {
-              amount
-              currencyCode
-            }
-            compareAtPriceV2 {
-              amount
-              currencyCode
-            }
-          }
+    images(first: 1) {
+      nodes {
+        id
+        url
+        altText
+        width
+        height
+      }
+    }
+    variants(first: 50) {
+      nodes {
+        id
+        title
+        availableForSale
+        price {
+          amount
+          currencyCode
         }
+        selectedOptions {
+          name
+          value
+        }
+        image {
+          id
+          url
+          altText
+          width
+          height
+        }
+      }
+    }
   }
 `;
 
-// NOTE: https://shopify.dev/docs/api/storefront/2022-04/objects/collection
 const COLLECTION_QUERY = `#graphql
   ${PRODUCT_ITEM_FRAGMENT}
   query Collection(
     $handle: String!
+    $filters: [ProductFilter!]
     $country: CountryCode
     $language: LanguageCode
     $first: Int
     $last: Int
     $startCursor: String
     $endCursor: String
+     $sortKey: ProductCollectionSortKeys
+    $reverse: Boolean
   ) @inContext(country: $country, language: $language) {
     collection(handle: $handle) {
       id
@@ -202,13 +351,27 @@ const COLLECTION_QUERY = `#graphql
       title
       description
       products(
-        first: $first,
-        last: $last,
-        before: $startCursor,
+        filters: $filters
+        first: $first
+        last: $last
+        before: $startCursor
         after: $endCursor
+        sortKey: $sortKey
+        reverse: $reverse
       ) {
         nodes {
           ...ProductItem
+        }
+        filters {
+          id
+          label
+          type
+          values {
+            id
+            label
+            count
+            input
+          }
         }
         pageInfo {
           hasPreviousPage
