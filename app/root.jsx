@@ -15,7 +15,6 @@ import resetStyles from '~/styles/reset.css?url';
 import appStyles from '~/styles/app.css?url';
 import swiperStyles from 'swiper/css';
 import bootstrapStyles from 'bootstrap/dist/css/bootstrap.min.css?url';
-import tailwindStyles from '~/styles/tailwind.css?url';
 import { PageLayout } from '~/components/PageLayout';
 import { FOOTER_QUERY, HEADER_QUERY } from '~/lib/fragments';
 
@@ -43,7 +42,6 @@ export function links() {
     { rel: 'stylesheet', href: resetStyles },
     { rel: 'stylesheet', href: appStyles },
     { rel: 'stylesheet', href: swiperStyles },
-    { rel: 'stylesheet', href: tailwindStyles },
     { rel: 'stylesheet', href: bootstrapStyles },
     {
       rel: 'preconnect',
